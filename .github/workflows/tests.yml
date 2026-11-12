@@ -1,0 +1,27 @@
+name: E2E tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install poppler-utils (optional PDF text checks)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Run browser E2E tests
+        run: ./tests/run_e2e.sh
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: tests/.artifacts
+          if-no-files-found: ignore

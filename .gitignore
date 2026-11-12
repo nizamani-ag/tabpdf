@@ -1,0 +1,22 @@
+# Never commit documents. The toolkit works on files you choose locally and
+# nothing in this repo needs a PDF checked in; generated test PDFs are created
+# on demand by tests/make_fixture.mjs and must stay out of git.
+*.pdf
+
+# Generated test files
+tests/fixtures/
+tests/.artifacts/
+.test/
+
+# Python
+__pycache__/
+*.py[co]
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+*~
+
+# Local scratch and Pages staging
+.tmp_*
+_site/

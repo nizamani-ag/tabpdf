@@ -1,0 +1,1523 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    (function () {
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("tabpdf-theme") || "bright";
+      } catch (_) {
+        document.documentElement.dataset.theme = "bright";
+      }
+    })();
+  </script>
+  <title>TabPDF — private PDF toolkit for your browser</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/tabpdf-256.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0047ab">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0f1e;
+      --bg-2: #111832;
+      --panel: rgba(18, 26, 51, .84);
+      --panel-2: rgba(27, 38, 73, .7);
+      --border: rgba(148, 171, 255, .15);
+      --border-strong: rgba(148, 171, 255, .3);
+      --text: #eef2ff;
+      --muted: #93a0c4;
+      --accent: #2f7dff;
+      --accent-2: #0047ab;
+      --good: #36d399;
+      --bad: #ff6b81;
+      --shadow: 0 24px 60px rgba(0, 0, 0, .36);
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 480px at 10% -10%, rgba(47, 125, 255, .20), transparent 60%),
+        radial-gradient(800px 500px at 100% 0%, rgba(0, 71, 171, .18), transparent 55%),
+        linear-gradient(160deg, var(--bg), var(--bg-2));
+      min-height: 100vh;
+    }
+    [hidden] { display: none !important; }
+    .wrap {
+      width: min(900px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 30px 0 44px;
+    }
+    body[data-tool="text"] .wrap,
+    body[data-tool="addtext"] .wrap {
+      width: min(1180px, calc(100% - 32px));
+      padding-top: 18px;
+    }
+    body[data-tool="text"] .hero p,
+    body[data-tool="addtext"] .hero p { display: none; }
+    .hero { text-align: center; margin-bottom: 18px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      font-size: 12.5px;
+      color: #bcd0ff;
+      background: rgba(47, 125, 255, .12);
+      border: 1px solid rgba(47, 125, 255, .25);
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 12px var(--good);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(28px, 4.5vw, 38px);
+      letter-spacing: -.035em;
+      line-height: 1.05;
+      background: linear-gradient(135deg, #fff, #9cc0ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .hero p {
+      margin: 0 auto;
+      max-width: 620px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      padding: 22px;
+      margin-top: 16px;
+    }
+    .panel h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: -.01em;
+    }
+    .muted { color: var(--muted); }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .pill {
+      font-size: 12px;
+      color: #cad7ff;
+      background: rgba(0, 71, 171, .16);
+      border: 1px solid rgba(0, 71, 171, .28);
+      border-radius: 999px;
+      padding: 5px 10px;
+      white-space: nowrap;
+    }
+
+    /* Drop zone */
+    .dropzone {
+      border: 1.5px dashed var(--border-strong);
+      border-radius: 15px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .18s ease, background .18s ease, transform .18s ease;
+      background: rgba(47, 125, 255, .055);
+      outline: none;
+    }
+    .dropzone:hover, .dropzone:focus-visible, .dropzone.is-over {
+      border-color: var(--accent);
+      background: rgba(47, 125, 255, .12);
+      transform: translateY(-1px);
+    }
+    .dz-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 12px;
+      border-radius: 14px;
+      color: #d6e2ff;
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, rgba(47, 125, 255, .28), rgba(0, 71, 171, .28));
+      border: 1px solid rgba(148, 171, 255, .22);
+    }
+    .dropzone p { margin: 0; }
+    .dropzone .muted { margin-top: 4px; font-size: 13.5px; }
+    .file-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+    }
+    .file-icon {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      color: #fff;
+      background: linear-gradient(135deg, #ff5f6d, #ff9a44);
+    }
+    .file-meta { min-width: 0; flex: 1; }
+    .file-name {
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-size { font-size: 13px; margin-top: 2px; }
+    .icon-btn {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .icon-btn:hover { color: #fff; border-color: var(--border-strong); }
+
+    /* Presets */
+    .presets {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .preset {
+      text-align: left;
+      padding: 13px 12px;
+      border-radius: 13px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, .025);
+      color: var(--text);
+      cursor: pointer;
+      transition: all .15s ease;
+      font: inherit;
+    }
+    .preset:hover {
+      border-color: var(--border-strong);
+      background: rgba(47, 125, 255, .08);
+    }
+    .preset.active {
+      border-color: var(--accent);
+      background: linear-gradient(145deg, rgba(47, 125, 255, .22), rgba(0, 71, 171, .18));
+      box-shadow: 0 0 0 1px rgba(47, 125, 255, .35) inset;
+    }
+    .preset-name { display: block; font-weight: 700; font-size: 14px; }
+    .preset-desc { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+
+    /* Advanced */
+    details.advanced {
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
+      padding-top: 4px;
+    }
+    details.advanced summary {
+      cursor: pointer;
+      padding: 11px 0 5px;
+      color: #c7d3f5;
+      font-size: 14px;
+      font-weight: 600;
+      user-select: none;
+    }
+    details.advanced summary::marker { color: var(--accent); }
+    .range-row { margin: 14px 0 4px; }
+    .range-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      font-size: 13.5px;
+    }
+    .range-head output {
+      min-width: 48px;
+      text-align: right;
+      color: #cbd7ff;
+      font-variant-numeric: tabular-nums;
+      font-weight: 650;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+    .hint { color: var(--muted); font-size: 12.5px; margin: 12px 0 2px; }
+
+    /* Layout helpers */
+    .actions-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      font: inherit;
+    }
+    :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .primary, .secondary {
+      appearance: none;
+      border: 0;
+      border-radius: 13px;
+      padding: 13px 18px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .14s ease, opacity .14s ease, box-shadow .14s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .primary {
+      width: 100%;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 28px rgba(47, 125, 255, .28);
+    }
+    .primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(47, 125, 255, .38); }
+    .primary:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+    .secondary {
+      color: var(--text);
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid var(--border);
+    }
+    .secondary:hover { background: rgba(255, 255, 255, .1); }
+    .download { width: auto; }
+
+    /* Progress */
+    .progress-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    #progress-text { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .progress-track {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .08);
+      overflow: hidden;
+    }
+    .progress-bar {
+      width: 8%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), #0a5cff);
+      transition: width .2s ease;
+    }
+    .progress-bar.indeterminate {
+      animation: pulse 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      from { width: 12%; opacity: .65; }
+      to { width: 82%; opacity: 1; }
+    }
+
+    /* Result */
+    .result { text-align: center; }
+    .result-check {
+      width: 52px;
+      height: 52px;
+      margin: 2px auto 12px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #08131a;
+      font-size: 28px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #7ff0c0, var(--good));
+      box-shadow: 0 0 30px rgba(54, 211, 153, .3);
+    }
+    .result h2 { margin-bottom: 14px; font-size: 20px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 0 auto 18px;
+    }
+    .stat {
+      padding: 14px 10px;
+      border-radius: 13px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+    }
+    .stat span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .stat strong { font-size: 19px; font-variant-numeric: tabular-nums; }
+    .stat.highlight strong { color: var(--good); }
+    .result .primary { width: auto; margin: 0 auto; }
+    #again-btn { margin-top: 10px; width: auto; }
+    #cancel-btn { margin-top: 12px; width: auto; }
+    .error {
+      border-color: rgba(255, 107, 129, .38);
+      background: rgba(255, 107, 129, .09);
+    }
+    .error strong { color: #ffb3bf; }
+    .error pre {
+      margin: 10px 0 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #ffd9df;
+      font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    footer {
+      margin-top: 26px;
+      text-align: center;
+      color: #6f7da4;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    footer a { color: #0a5cff; }
+    code {
+      background: rgba(255, 255, 255, .08);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font: 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    @media (max-width: 640px) {
+      .theme-toggle { top: 10px; right: 10px; width: 36px; height: 36px; font-size: 15px; }
+      .wrap { padding-top: 28px; }
+      .panel { padding: 17px; }
+      .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stats { grid-template-columns: repeat(3, 1fr); }
+      .stat strong { font-size: 16px; }
+    }
+    /* Tool tabs */
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin: 0 0 4px;
+    }
+    .tab {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, .03);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 10px 15px;
+      font-weight: 650;
+      font-size: 13.5px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all .15s ease;
+    }
+    .tab:hover:not(:disabled) {
+      color: #fff;
+      border-color: var(--border-strong);
+      background: rgba(47, 125, 255, .09);
+    }
+    .tab.active {
+      color: #fff;
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(47, 125, 255, .30), rgba(0, 71, 171, .26));
+      box-shadow: 0 8px 22px rgba(47, 125, 255, .18);
+    }
+    .tab:disabled { opacity: .45; cursor: not-allowed; }
+    @media (max-width: 760px) {
+      .tab-bar {
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+      }
+      .tab-bar .tabs {
+        flex: 1 1 auto;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        margin: 0;
+        padding: 2px 2px 6px;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      .tab-bar .tabs::-webkit-scrollbar { display: none; }
+      .tab { flex: 0 0 auto; }
+      .theme-toggle { flex: 0 0 auto; }
+    }
+
+    /* Form controls */
+    .field { margin-bottom: 16px; }
+    .field:last-child { margin-bottom: 0; }
+    .field > label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 13.5px;
+      font-weight: 650;
+      color: var(--text);
+    }
+    .text-input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(8, 14, 30, .72);
+      color: var(--text);
+      font: inherit;
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    .text-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(47, 125, 255, .16);
+    }
+    select.text-input { cursor: pointer; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .chip {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, .03);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .chip:hover { color: #fff; border-color: var(--border-strong); background: rgba(47, 125, 255, .1); }
+
+    /* Merge list */
+    .merge-list {
+      list-style: none;
+      padding: 0;
+      margin: 14px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .merge-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      border-radius: 12px;
+    }
+    .merge-index {
+      width: 27px;
+      height: 27px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: rgba(47, 125, 255, .16);
+      border: 1px solid rgba(47, 125, 255, .22);
+      color: #d5e0ff;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .merge-meta { flex: 1; min-width: 0; }
+    .merge-name {
+      font-size: 13.5px;
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .merge-size { font-size: 12px; margin-top: 2px; }
+    .merge-actions { display: flex; gap: 5px; flex: 0 0 auto; }
+    .mini-btn {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .mini-btn:hover:not(:disabled) { color: #fff; border-color: var(--border-strong); background: rgba(255, 255, 255, .05); }
+    .mini-btn:disabled { opacity: .3; cursor: default; }
+    .tool-options > .panel-head { margin-bottom: 14px; }
+
+    /* Page gallery */
+    .gallery-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .gallery-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .gallery-status {
+      font-size: 13px;
+      margin: 0 0 10px;
+    }
+    .page-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+      gap: 11px;
+      max-height: 62vh;
+      overflow: auto;
+      padding: 3px;
+      scrollbar-width: thin;
+    }
+    .page-tile {
+      position: relative;
+      appearance: none;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: rgba(8, 14, 30, .7);
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease, background .15s ease;
+      font: inherit;
+      text-align: center;
+    }
+    .page-tile:hover {
+      border-color: var(--border-strong);
+      background: rgba(47, 125, 255, .08);
+      transform: translateY(-1px);
+    }
+    .page-tile.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(47, 125, 255, .35);
+      background: rgba(47, 125, 255, .12);
+    }
+    .page-gallery.is-busy .page-tile {
+      pointer-events: none;
+      opacity: .65;
+    }
+    #gallery-panel[data-tool="delete"] .page-tile.selected {
+      border-color: var(--bad);
+      box-shadow: 0 0 0 2px rgba(255, 107, 129, .25);
+      background: rgba(255, 107, 129, .11);
+    }
+    #gallery-panel[data-tool="extract"] .page-tile.selected {
+      border-color: var(--good);
+      box-shadow: 0 0 0 2px rgba(54, 211, 153, .26);
+      background: rgba(54, 211, 153, .10);
+    }
+    .page-thumb {
+      position: relative;
+      width: 100%;
+      min-height: 88px;
+      aspect-ratio: 0.72;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #fff;
+      border-radius: 7px;
+    }
+    .page-thumb canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .page-placeholder {
+      color: #8a97b8;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .page-badge {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      z-index: 2;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(4, 9, 22, .84);
+      color: #d9e3ff;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+    .page-select-badge {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      z-index: 2;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+    }
+    #gallery-panel[data-tool="delete"] .page-select-badge { background: var(--bad); }
+    #gallery-panel[data-tool="extract"] .page-select-badge { background: var(--good); color: #061b13; }
+    .gallery-error-tile .page-placeholder { color: var(--bad); }
+
+    /* Move-pages mode: drag handles + drop indicators */
+    .page-gallery.is-move-mode .page-tile { cursor: grab; }
+    .page-gallery.is-move-mode .page-tile:active { cursor: grabbing; }
+    .page-tile.is-dragging { opacity: .4; }
+    .page-tile.drop-before {
+      box-shadow: -4px 0 0 -1px var(--accent), 0 0 0 2px rgba(47, 125, 255, .35);
+    }
+    .page-tile.drop-after {
+      box-shadow: 4px 0 0 -1px var(--accent), 0 0 0 2px rgba(47, 125, 255, .35);
+    }
+    .page-tile.is-moved .page-badge {
+      background: var(--accent);
+      color: #fff;
+    }
+    html[data-theme="bright"] .page-tile.is-moved .page-badge { color: #fff; }
+
+    /* Replace-page mode */
+    #gallery-panel[data-tool="replace"] .page-tile.selected {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, .3);
+      background: rgba(245, 158, 11, .10);
+    }
+    #gallery-panel[data-tool="replace"] .page-select-badge {
+      background: #f59e0b;
+      color: #241a04;
+    }
+    #replace-gallery-panel .page-tile.selected {
+      border-color: var(--good);
+      box-shadow: 0 0 0 2px rgba(54, 211, 153, .26);
+      background: rgba(54, 211, 153, .10);
+    }
+    #replace-gallery-panel .page-select-badge {
+      background: var(--good);
+      color: #061b13;
+    }
+    html[data-theme="bright"] #replace-gallery-panel .page-tile.selected {
+      border-color: #00b47a;
+      box-shadow: 0 0 0 2px rgba(0, 180, 122, .28);
+      background: rgba(0, 180, 122, .10);
+    }
+    html[data-theme="bright"] #gallery-panel[data-tool="replace"] .page-tile.selected {
+      border-color: #d97706;
+      box-shadow: 0 0 0 2px rgba(217, 119, 6, .28);
+      background: rgba(217, 119, 6, .10);
+    }
+    html[data-theme="bright"] #gallery-panel[data-tool="replace"] .page-select-badge {
+      background: #d97706;
+      color: #fff;
+    }
+
+    /* ----------------------------------------------------------------
+       Tab bar / theme toggle
+       ---------------------------------------------------------------- */
+    .tab-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 0 4px;
+    }
+    .tab-bar .tabs { margin: 0; }
+    .theme-toggle {
+      appearance: none;
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 30;
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 17px;
+      line-height: 1;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+      box-shadow: 0 8px 22px rgba(15, 25, 70, .10);
+    }
+    .theme-toggle:hover {
+      transform: translateY(-1px);
+      border-color: var(--border-strong);
+    }
+
+    /* ----------------------------------------------------------------
+       Bright theme (default)
+       ---------------------------------------------------------------- */
+    html[data-theme="bright"] {
+      color-scheme: light;
+      --bg: #f6f9ff;
+      --bg-2: #e8efff;
+      --panel: rgba(255, 255, 255, .94);
+      --panel-2: #eef4ff;
+      --border: rgba(0, 71, 171, .18);
+      --border-strong: rgba(0, 71, 171, .34);
+      --text: #111d45;
+      --muted: #586a9b;
+      --accent: #0047ab;
+      --accent-2: #0a5cff;
+      --good: #00b47a;
+      --bad: #ff3d68;
+      --shadow: 0 20px 55px rgba(0, 71, 171, .15);
+    }
+    html[data-theme="bright"] body {
+      background:
+        radial-gradient(900px 480px at 8% -12%, rgba(0, 71, 171, .20), transparent 60%),
+        radial-gradient(780px 500px at 102% -4%, rgba(10, 92, 255, .16), transparent 56%),
+        radial-gradient(700px 420px at 50% 115%, rgba(10, 92, 255, .12), transparent 55%),
+        linear-gradient(165deg, #ffffff 0%, #f4f8ff 38%, #e9f0ff 100%);
+    }
+    html[data-theme="bright"] h1 {
+      background: linear-gradient(135deg, #13204a 0%, #0047ab 52%, #0a5cff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+    html[data-theme="bright"] .badge {
+      color: #0047ab;
+      background: rgba(0, 71, 171, .10);
+      border-color: rgba(0, 71, 171, .28);
+    }
+    html[data-theme="bright"] .pill {
+      color: #0047ab;
+      background: rgba(10, 92, 255, .10);
+      border-color: rgba(10, 92, 255, .24);
+    }
+    html[data-theme="bright"] .dropzone {
+      background: rgba(0, 71, 171, .045);
+      border-color: rgba(0, 71, 171, .27);
+    }
+    html[data-theme="bright"] .dropzone:hover,
+    html[data-theme="bright"] .dropzone:focus-visible,
+    html[data-theme="bright"] .dropzone.is-over {
+      background: rgba(0, 71, 171, .11);
+      border-color: var(--accent);
+    }
+    html[data-theme="bright"] .dz-icon {
+      color: #0047ab;
+      background: linear-gradient(135deg, rgba(0, 71, 171, .16), rgba(10, 92, 255, .14));
+      border-color: rgba(0, 71, 171, .22);
+    }
+    html[data-theme="bright"] .preset {
+      background: #ffffff;
+      color: var(--text);
+      border-color: rgba(0, 71, 171, .18);
+    }
+    html[data-theme="bright"] .preset:hover {
+      color: var(--text);
+      background: #eef4ff;
+      border-color: rgba(0, 71, 171, .38);
+    }
+    html[data-theme="bright"] .preset.active {
+      color: #0e1c49;
+      background: linear-gradient(145deg, rgba(0, 71, 171, .20), rgba(10, 92, 255, .16));
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(0, 71, 171, .45) inset;
+    }
+    html[data-theme="bright"] details.advanced summary { color: #33447c; }
+    html[data-theme="bright"] .range-head output { color: #003a8c; }
+    html[data-theme="bright"] .chip {
+      background: #ffffff;
+      color: var(--muted);
+      border-color: rgba(0, 71, 171, .20);
+    }
+    html[data-theme="bright"] .chip:hover {
+      color: var(--text);
+      background: #eef4ff;
+      border-color: rgba(0, 71, 171, .42);
+    }
+    html[data-theme="bright"] .tab {
+      color: #52649a;
+      background: rgba(255, 255, 255, .82);
+      border-color: rgba(0, 71, 171, .18);
+    }
+    html[data-theme="bright"] .tab:hover:not(:disabled) {
+      color: var(--text);
+      background: #eef4ff;
+      border-color: rgba(0, 71, 171, .42);
+    }
+    html[data-theme="bright"] .tab.active {
+      color: #ffffff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-color: transparent;
+      box-shadow: 0 10px 26px rgba(0, 71, 171, .28);
+    }
+    html[data-theme="bright"] .secondary {
+      color: var(--text);
+      background: #ffffff;
+      border-color: rgba(0, 71, 171, .24);
+    }
+    html[data-theme="bright"] .secondary:hover { background: #eef4ff; }
+    html[data-theme="bright"] .icon-btn:hover,
+    html[data-theme="bright"] .mini-btn:hover:not(:disabled) {
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+    html[data-theme="bright"] .progress-track { background: rgba(0, 71, 171, .12); }
+    html[data-theme="bright"] .stat { background: #eef4ff; border-color: rgba(0, 71, 171, .15); }
+    html[data-theme="bright"] .page-tile {
+      background: #ffffff;
+      border-color: rgba(0, 71, 171, .18);
+    }
+    html[data-theme="bright"] .page-tile:hover {
+      background: #eef4ff;
+      border-color: rgba(0, 71, 171, .40);
+    }
+    html[data-theme="bright"] .page-placeholder { color: #92a0c2; }
+    html[data-theme="bright"] code {
+      background: rgba(0, 71, 171, .08);
+      border-color: rgba(0, 71, 171, .14);
+    }
+    html[data-theme="bright"] .error {
+      border-color: rgba(255, 61, 104, .35);
+      background: rgba(255, 61, 104, .07);
+    }
+    html[data-theme="bright"] .error strong { color: #b0002b; }
+    html[data-theme="bright"] .error pre { color: #7a1029; }
+    html[data-theme="bright"] footer { color: #6b7cab; }
+    html[data-theme="bright"] footer a { color: #0047ab; }
+    html[data-theme="bright"] .gallery-status { color: #5b6d9e; }
+    html[data-theme="bright"] .text-input {
+      background: #ffffff;
+      color: var(--text);
+      border-color: rgba(0, 71, 171, .22);
+    }
+    html[data-theme="bright"] .text-input::placeholder { color: #8a98c0; }
+    html[data-theme="bright"] .merge-index { color: #0047ab; }
+
+    /* Text editor */
+    .text-editor-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, .85fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .text-editor-grid.is-busy { pointer-events: none; opacity: .65; }
+    .text-preview-column { min-width: 0; }
+    .text-preview {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: 0 12px 34px rgba(15, 25, 70, .12);
+    }
+    .text-preview canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      cursor: crosshair;
+    }
+    .text-preview-scroll {
+      max-width: 100%;
+      max-height: min(72vh, 940px);
+      overflow: auto;
+      border-radius: 12px;
+      scrollbar-width: thin;
+      overscroll-behavior: contain;
+    }
+    .text-preview-scroll .text-preview {
+      display: inline-block;
+      max-width: none;
+    }
+    .text-preview-scroll .text-preview canvas { max-width: none; }
+    .zoom-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0 2px;
+    }
+    .zoom-bar .mini-btn {
+      width: 30px;
+      height: 30px;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .zoom-bar .mini-btn.zoom-fit {
+      width: auto;
+      padding: 0 11px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .zoom-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .zoom-value {
+      min-width: 46px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .text-cursor {
+      position: absolute;
+      width: 2px;
+      height: 20px;
+      background: var(--accent);
+      pointer-events: none;
+      transform: translate(-1px, -100%);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, .6);
+    }
+    .text-side h3 {
+      margin: 18px 0 8px;
+      font-size: 13.5px;
+      letter-spacing: .01em;
+    }
+    .text-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .checkbox-field {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 7px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .checkbox-field label { display: flex; align-items: center; gap: 7px; }
+    .colour-input { height: 47px; padding: 5px; cursor: pointer; }
+    .text-existing-list,
+    .text-edits-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 190px;
+      overflow: auto;
+      scrollbar-width: thin;
+    }
+    .text-existing-item,
+    .text-edit-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 12.5px;
+      line-height: 1.35;
+    }
+    .text-existing-item { cursor: pointer; text-align: left; width: 100%; }
+    .text-existing-item:hover { border-color: var(--border-strong); }
+    .text-existing-item.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+    .text-existing-item .preview-text {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .text-edit-item .edit-text {
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+    }
+    .text-edit-item .mini-btn { flex: 0 0 auto; }
+    @media (max-width: 820px) {
+      .text-editor-grid { grid-template-columns: 1fr; }
+      .text-grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* Add-text editor */
+    .page-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .page-nav .mini-btn {
+      width: 32px;
+      height: 32px;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .addtext-overlay {
+      position: absolute;
+      inset: 0;
+      cursor: text;
+      touch-action: none;
+    }
+    .addtext-overlay.is-dragging { cursor: grabbing; }
+    .addtext-overlay.is-over-item { cursor: move; }
+
+    .font-tag {
+      flex: 0 0 auto;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(0, 71, 171, .08);
+      color: var(--muted);
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="badge">100% local &middot; files never leave your device</div>
+      <h1>TabPDF</h1>
+      <p>Compress, rearrange, and write on PDFs locally in your browser. No uploads, no install, no account &mdash; pick a tool below.</p>
+    </header>
+
+    <div class="tab-bar">
+      <nav class="tabs" id="tool-tabs" role="tablist" aria-label="PDF tools">
+        <button type="button" class="tab active" data-tool="compress" role="tab" aria-selected="true">Compress</button>
+        <button type="button" class="tab" data-tool="delete" role="tab" aria-selected="false">Delete pages</button>
+        <button type="button" class="tab" data-tool="extract" role="tab" aria-selected="false">Extract pages</button>
+        <button type="button" class="tab" data-tool="rotate" role="tab" aria-selected="false">Rotate pages</button>
+        <button type="button" class="tab" data-tool="move" role="tab" aria-selected="false">Move pages</button>
+        <button type="button" class="tab" data-tool="replace" role="tab" aria-selected="false">Replace page</button>
+        <button type="button" class="tab" data-tool="addtext" role="tab" aria-selected="false">Add text</button>
+        <button type="button" class="tab" data-tool="text" role="tab" aria-selected="false">Edit text</button>
+        <button type="button" class="tab" data-tool="merge" role="tab" aria-selected="false">Merge PDFs</button>
+      </nav>
+      <button type="button" class="theme-toggle" id="theme-toggle" title="Switch to dark colours" aria-label="Switch colour theme">🌙</button>
+    </div>
+
+    <section class="panel error" id="file-warning" hidden>
+      <strong>Local server required</strong>
+      <p class="muted" style="margin: 8px 0 0; line-height: 1.6">
+        Browsers block WebAssembly and Web Workers on <code>file://</code> pages.
+        Start the launcher with <code>./run_web.py</code> and it will open this
+        page at <code>http://127.0.0.1:8765/</code> automatically.
+      </p>
+    </section>
+
+    <section class="panel" id="file-panel">
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose a PDF file">
+        <div class="dz-icon" aria-hidden="true">PDF</div>
+        <p><strong id="dropzone-title">Drop a PDF here</strong></p>
+        <p class="muted" id="dropzone-subtitle">or click to browse &middot; PDF files only</p>
+        <input type="file" id="file-input" accept="application/pdf,.pdf" hidden>
+      </div>
+      <div class="file-info" id="file-info" hidden>
+        <div class="file-icon" aria-hidden="true">PDF</div>
+        <div class="file-meta">
+          <div class="file-name" id="file-name"></div>
+          <div class="file-size muted" id="file-size"></div>
+        </div>
+        <button type="button" class="icon-btn" id="clear-file" title="Remove file" aria-label="Remove file">&times;</button>
+      </div>
+    </section>
+
+    <section class="panel" id="merge-panel" hidden>
+      <div class="dropzone" id="merge-dropzone" tabindex="0" role="button" aria-label="Choose PDF files to merge">
+        <div class="dz-icon" aria-hidden="true">+</div>
+        <p><strong>Drop PDFs here to merge</strong></p>
+        <p class="muted">or click to choose multiple files</p>
+        <input type="file" id="merge-input" accept="application/pdf,.pdf" multiple hidden>
+      </div>
+      <ul class="merge-list" id="merge-list"></ul>
+      <p class="hint" id="merge-empty" style="margin: 12px 0 0">No files yet. Add at least two PDFs, then arrange the order with the arrows.</p>
+    </section>
+
+    <section class="panel" id="tool-options-panel">
+      <div id="options-compress" class="tool-options">
+        <div class="panel-head">
+          <h2>Compression level</h2>
+          <span class="pill" id="current-preset-label">Balanced</span>
+        </div>
+        <div class="presets" id="presets">
+          <button type="button" class="preset" data-preset="light">
+            <span class="preset-name">Light</span>
+            <span class="preset-desc">300 DPI &middot; best quality</span>
+          </button>
+          <button type="button" class="preset active" data-preset="balanced">
+            <span class="preset-name">Balanced</span>
+            <span class="preset-desc">150 DPI &middot; recommended</span>
+          </button>
+          <button type="button" class="preset" data-preset="strong">
+            <span class="preset-name">Strong</span>
+            <span class="preset-desc">120 DPI &middot; much smaller</span>
+          </button>
+          <button type="button" class="preset" data-preset="extreme">
+            <span class="preset-name">Extreme</span>
+            <span class="preset-desc">72 DPI &middot; smallest size</span>
+          </button>
+        </div>
+
+        <details class="advanced" id="advanced">
+          <summary>Advanced settings</summary>
+          <div class="range-row">
+            <div class="range-head"><label for="dpi">Image DPI</label><output id="dpi-out">150</output></div>
+            <input type="range" id="dpi" min="40" max="400" step="1" value="150">
+          </div>
+          <div class="range-row">
+            <div class="range-head"><label for="quality">JPEG quality</label><output id="quality-out">75</output></div>
+            <input type="range" id="quality" min="5" max="100" step="1" value="75">
+          </div>
+          <div class="range-row">
+            <div class="range-head"><label for="mono-dpi">Monochrome text DPI</label><output id="mono-dpi-out">300</output></div>
+            <input type="range" id="mono-dpi" min="100" max="600" step="10" value="300">
+          </div>
+          <p class="hint">Higher values mean better quality and larger files.</p>
+        </details>
+      </div>
+
+      <div id="options-delete" class="tool-options" hidden>
+        <div class="panel-head">
+          <h2>Delete pages</h2>
+          <span class="pill">Click to select</span>
+        </div>
+        <p class="hint">Click pages in the gallery below to mark them for deletion. You cannot delete every page.</p>
+      </div>
+
+      <div id="options-extract" class="tool-options" hidden>
+        <div class="panel-head">
+          <h2>Extract pages</h2>
+          <span class="pill">Click in output order</span>
+        </div>
+        <p class="hint">Click pages in the order you want them in the new PDF. The badge on each selected page shows its output order.</p>
+      </div>
+
+      <div id="options-rotate" class="tool-options" hidden>
+        <div class="panel-head">
+          <h2>Rotate pages</h2>
+          <span class="pill">Click to select</span>
+        </div>
+        <p class="hint">Click pages in the gallery below, then choose a rotation.</p>
+        <div class="field" style="margin-top: 14px">
+          <label for="rotate-angle">Rotation</label>
+          <select class="text-input" id="rotate-angle">
+            <option value="90">90&deg; clockwise</option>
+            <option value="180">180&deg;</option>
+            <option value="270">90&deg; counter-clockwise</option>
+          </select>
+        </div>
+      </div>
+      <div id="options-move" class="tool-options" hidden>
+        <div class="panel-head">
+          <h2>Move pages</h2>
+          <span class="pill">Drag to reorder</span>
+        </div>
+        <p class="hint">Drag a page to a new position in the gallery below. Click several pages first to move them as a group, or nudge the selection with the &larr; / &rarr; buttons. The number badge is the original page; the grid shows the new order.</p>
+      </div>
+
+      <div id="options-replace" class="tool-options" hidden>
+        <div class="panel-head">
+          <h2>Replace pages</h2>
+          <span class="pill">Click to select</span>
+        </div>
+        <p class="hint">Click the pages in your PDF that should be swapped out, then choose the PDF that holds the replacement pages.</p>
+        <div class="field" style="margin-top: 14px">
+          <label id="replace-file-label">Replacement PDF</label>
+          <div class="actions-row">
+            <button type="button" class="secondary" id="replace-pick">Choose replacement PDF&hellip;</button>
+            <button type="button" class="icon-btn" id="replace-clear" title="Remove replacement PDF" aria-label="Remove replacement PDF" hidden>&times;</button>
+          </div>
+          <input type="file" id="replace-input" accept="application/pdf,.pdf" hidden>
+          <p class="hint" id="replace-file-name" style="margin: 8px 0 0" hidden></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="actions-panel">
+      <div class="actions-row">
+        <button type="button" class="primary" id="action-btn" disabled>Compress PDF</button>
+      </div>
+      <p class="hint" id="action-hint" style="margin: 12px 0 0"></p>
+    </section>
+
+    <section class="panel" id="gallery-panel" hidden>
+      <div class="gallery-head">
+        <div>
+          <h2 id="gallery-title">Select pages</h2>
+          <p class="hint" id="gallery-hint" style="margin: 5px 0 0">Click pages to select them.</p>
+        </div>
+        <div class="gallery-toolbar" id="gallery-toolbar">
+          <button type="button" class="chip" id="gallery-move-left" hidden title="Move the selection one slot earlier">&larr; Move</button>
+          <button type="button" class="chip" id="gallery-move-right" hidden title="Move the selection one slot later">Move &rarr;</button>
+          <button type="button" class="chip" id="gallery-reset-order" hidden>Reset order</button>
+          <button type="button" class="chip" id="gallery-all">All</button>
+          <button type="button" class="chip" id="gallery-odd">Odd</button>
+          <button type="button" class="chip" id="gallery-even">Even</button>
+          <button type="button" class="chip" id="gallery-invert">Invert</button>
+          <button type="button" class="chip" id="gallery-clear">Clear</button>
+          <span class="pill" id="gallery-count">0 selected</span>
+        </div>
+      </div>
+      <div class="gallery-status muted" id="gallery-status" hidden></div>
+      <div class="page-gallery" id="page-gallery"></div>
+    </section>
+
+    <section class="panel" id="replace-gallery-panel" hidden>
+      <div class="gallery-head">
+        <div>
+          <h2 id="replace-gallery-title">Replacement pages</h2>
+          <p class="hint" id="replace-gallery-hint" style="margin: 5px 0 0">Click pages from the replacement PDF in the order they should be inserted.</p>
+        </div>
+        <div class="gallery-toolbar">
+          <button type="button" class="chip" id="replace-gallery-all">All</button>
+          <button type="button" class="chip" id="replace-gallery-clear">Clear</button>
+          <span class="pill" id="replace-gallery-count">0 selected</span>
+        </div>
+      </div>
+      <div class="gallery-status muted" id="replace-gallery-status" hidden></div>
+      <div class="page-gallery" id="replace-gallery"></div>
+    </section>
+
+    <section class="panel" id="text-editor-panel" hidden>
+      <div class="panel-head">
+        <div>
+          <h2 id="text-editor-title">Edit text</h2>
+          <p class="hint" id="text-editor-hint" style="margin: 5px 0 0">
+            Click an existing text block below to cover it and type replacement text, or click
+            the preview to add text. Replacements are covered with a white box and drawn on top;
+            the original text is not rewritten. For a simpler click-and-type editor, use the
+            <strong>Add text</strong> tab.
+          </p>
+        </div>
+        <span class="pill" id="text-editor-page">Page &mdash;</span>
+      </div>
+
+      <div class="text-editor-grid" id="text-editor-grid">
+        <div class="text-preview-column">
+          <div class="text-preview-scroll">
+            <div class="text-preview" id="text-preview">
+              <canvas id="text-preview-canvas"></canvas>
+              <div class="text-cursor" id="text-cursor" hidden></div>
+            </div>
+          </div>
+          <div class="zoom-bar">
+            <span class="zoom-label">Zoom</span>
+            <button type="button" class="mini-btn" id="text-zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+            <span class="zoom-label zoom-value" id="text-zoom-label">100%</span>
+            <button type="button" class="mini-btn" id="text-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="mini-btn zoom-fit" id="text-zoom-fit" title="Fit the page to the panel width">Fit</button>
+          </div>
+          <p class="hint">Click anywhere on the page to set the insertion point for new text.</p>
+        </div>
+
+        <div class="text-side">
+          <div class="field">
+            <label for="text-value">Text</label>
+            <textarea class="text-input" id="text-value" rows="3" placeholder="Type here&hellip;"></textarea>
+          </div>
+
+          <div class="text-grid-2">
+            <div class="field">
+              <label for="text-font">Font</label>
+              <select class="text-input" id="text-font">
+                <option value="Helvetica">Helvetica / Sans</option>
+                <option value="Times">Times / Serif</option>
+                <option value="Courier">Courier / Monospace</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="text-size">Size (pt)</label>
+              <input class="text-input" id="text-size" type="number" min="4" max="240" step="1" value="14">
+            </div>
+          </div>
+
+          <div class="text-grid-2">
+            <div class="field">
+              <label for="text-color">Colour</label>
+              <input class="text-input colour-input" id="text-color" type="color" value="#111111">
+            </div>
+            <div class="field checkbox-field">
+              <label><input type="checkbox" id="text-bold"> Bold</label>
+              <label><input type="checkbox" id="text-italic"> Italic</label>
+              <label><input type="checkbox" id="text-cover" checked> Cover old text</label>
+            </div>
+          </div>
+
+          <p class="hint" id="text-font-help" style="margin: 4px 0 0">
+            Tip: click an existing text block below to detect its font family and auto-select the closest match.
+          </p>
+
+          <div class="actions-row">
+            <button type="button" class="primary" id="text-place-btn" disabled>Place text</button>
+            <button type="button" class="secondary" id="text-clear-active" hidden>Clear selection</button>
+          </div>
+
+          <h3>Existing text on this page</h3>
+          <div class="text-existing-list" id="text-existing-list"></div>
+
+          <h3>Pending edits on this page</h3>
+          <div class="text-edits-list" id="text-edits-list"></div>
+
+          <div class="actions-row" style="margin-top: 16px">
+            <button type="button" class="primary" id="text-apply-btn" disabled>Apply text edits</button>
+            <button type="button" class="secondary" id="text-clear-edits">Clear page edits</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="addtext-panel" hidden>
+      <div class="panel-head">
+        <div>
+          <h2>Add text</h2>
+          <p class="hint" id="addtext-hint" style="margin: 5px 0 0">
+            Click anywhere on the page to place a text box, then type. Drag a box to
+            move it. New text is drawn on top of the page &mdash; the original content
+            is not changed.
+          </p>
+        </div>
+        <div class="page-nav">
+          <button type="button" class="mini-btn" id="addtext-prev" title="Previous page" aria-label="Previous page">&larr;</button>
+          <span class="pill" id="addtext-page">Page &mdash;</span>
+          <button type="button" class="mini-btn" id="addtext-next" title="Next page" aria-label="Next page">&rarr;</button>
+        </div>
+      </div>
+
+      <div class="text-editor-grid" id="addtext-grid">
+        <div class="text-preview-column">
+          <div class="text-preview-scroll">
+            <div class="text-preview" id="addtext-preview">
+              <canvas id="addtext-base"></canvas>
+              <canvas id="addtext-overlay" class="addtext-overlay"></canvas>
+            </div>
+          </div>
+          <div class="zoom-bar">
+            <span class="zoom-label">Zoom</span>
+            <button type="button" class="mini-btn" id="addtext-zoom-out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+            <span class="zoom-label zoom-value" id="addtext-zoom-label">100%</span>
+            <button type="button" class="mini-btn" id="addtext-zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="mini-btn zoom-fit" id="addtext-zoom-fit" title="Fit the page to the panel width">Fit</button>
+          </div>
+          <p class="hint">
+            Click the page to place text &middot; drag a text box to move it &middot;
+            click a box to edit it.
+          </p>
+        </div>
+
+        <div class="text-side">
+          <div class="field">
+            <label for="addtext-value">Text</label>
+            <textarea class="text-input" id="addtext-value" rows="3" placeholder="Click on the page first, then type here&hellip;" disabled></textarea>
+          </div>
+
+          <div class="text-grid-2">
+            <div class="field">
+              <label for="addtext-font">Font</label>
+              <select class="text-input" id="addtext-font">
+                <option value="Helvetica">Helvetica / Sans</option>
+                <option value="Times">Times / Serif</option>
+                <option value="Courier">Courier / Monospace</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="addtext-size">Size (pt)</label>
+              <input class="text-input" id="addtext-size" type="number" min="4" max="240" step="1" value="16">
+            </div>
+          </div>
+
+          <div class="text-grid-2">
+            <div class="field">
+              <label for="addtext-color">Colour</label>
+              <input class="text-input colour-input" id="addtext-color" type="color" value="#111111">
+            </div>
+            <div class="field checkbox-field">
+              <label><input type="checkbox" id="addtext-bold"> Bold</label>
+              <label><input type="checkbox" id="addtext-italic"> Italic</label>
+            </div>
+          </div>
+
+          <div class="actions-row">
+            <button type="button" class="secondary" id="addtext-delete" disabled>Delete selected</button>
+            <button type="button" class="secondary" id="addtext-clear-page" disabled>Clear this page</button>
+          </div>
+
+          <h3>Text to add (all pages)</h3>
+          <div class="text-edits-list" id="addtext-list"></div>
+
+          <div class="actions-row" style="margin-top: 16px">
+            <button type="button" class="primary" id="addtext-apply" disabled>Apply text</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="progress-panel" hidden aria-live="polite">
+      <div class="progress-head">
+        <span id="status">Preparing&hellip;</span>
+        <span id="progress-text"></span>
+      </div>
+      <div class="progress-track"><div class="progress-bar indeterminate" id="progress-bar"></div></div>
+      <button type="button" class="secondary" id="cancel-btn" hidden>Cancel</button>
+    </section>
+
+    <section class="panel error" id="error-panel" hidden>
+      <strong>Something went wrong</strong>
+      <pre id="error-message"></pre>
+    </section>
+
+    <section class="panel result" id="result-panel" hidden aria-live="polite">
+      <div class="result-check" aria-hidden="true">&check;</div>
+      <h2 id="result-title">Compression complete</h2>
+      <div class="stats">
+        <div class="stat"><span>Before</span><strong id="before-size">&mdash;</strong></div>
+        <div class="stat"><span>After</span><strong id="after-size">&mdash;</strong></div>
+        <div class="stat highlight"><span id="saved-label">Saved</span><strong id="saved-percent">&mdash;</strong></div>
+      </div>
+      <a id="download-link" class="primary download" download>Download PDF</a>
+      <div><button type="button" class="secondary" id="again-btn">Start another</button></div>
+    </section>
+
+    <footer>
+      Everything runs locally in this tab. Ghostscript / GhostPDL WASM is
+      <a href="./vendor/ghostpdl/LICENSE" target="_blank" rel="noreferrer">AGPL-3.0</a>;
+      pdf-lib is <a href="./vendor/pdf-lib/LICENSE.md" target="_blank" rel="noreferrer">MIT</a>;
+      PDF.js is <a href="./vendor/pdfjs/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>.
+    </footer>
+  </div>
+
+  <script>
+    // Inline classic script: keep this working even when the type=module
+    // script is blocked by the browser on file:// URLs.
+    if (location.protocol === "file:") {
+      document.getElementById("file-warning").hidden = false;
+    }
+  </script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
