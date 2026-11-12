@@ -30,7 +30,7 @@ page that also works offline once loaded.
 ## Quick start
 
 ```bash
-git clone <your-repo-url> tabpdf
+git clone https://github.com/nizamani-ag/tabpdf.git
 cd tabpdf
 ./run_web.py
 ```
