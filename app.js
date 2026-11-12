@@ -2027,6 +2027,7 @@ function applyAddTextStyle() {
 async function renderAddTextPage(pageNumber) {
   const token = ++state.addTextToken;
   state.addTextViewport = null;
+  delete els.addTextOverlay.dataset.renderedPage;
   const release = await acquireRenderLock("addTextRenderLock", "addTextRenderTask");
   try {
     if (token !== state.addTextToken) return;
@@ -2072,6 +2073,7 @@ async function renderAddTextPage(pageNumber) {
     state.addTextViewport = viewport;
     drawAddTextPreview();
     updateAddTextZoomLabel();
+    els.addTextOverlay.dataset.renderedPage = String(pageNumber);
   } finally {
     release();
   }

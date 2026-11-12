@@ -174,7 +174,10 @@ async function main() {
   await evaluate(`document.querySelector('[data-tool="addtext"]').click()`);
   await waitFor("document.querySelectorAll('#page-gallery .page-tile').length === 3", "gallery tiles");
   await evaluate(`document.querySelector('#page-gallery .page-tile[data-page="1"]').click()`);
-  await waitFor("document.getElementById('addtext-overlay').width > 100", "add-text editor");
+  await waitFor(
+    "document.getElementById('addtext-overlay').dataset.renderedPage === '1'",
+    "add-text editor"
+  );
 
   const geometry = await evaluate(`(() => {
     const overlay = document.getElementById("addtext-overlay");
@@ -259,10 +262,9 @@ async function main() {
   console.log("Second page at 125% zoom");
   await evaluate(`document.getElementById("addtext-next").click()`);
   await waitFor(
-    "document.getElementById('addtext-page').textContent.includes('Page 2')",
-    "page 2 label"
+    "document.getElementById('addtext-page').textContent.includes('Page 2') && document.getElementById('addtext-overlay').dataset.renderedPage === '2'",
+    "page 2 rendered"
   );
-  await new Promise((resolve) => setTimeout(resolve, 800));
 
   const secondPlacement = await evaluate(`(() => {
     const overlay = document.getElementById("addtext-overlay");

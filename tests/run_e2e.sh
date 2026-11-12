@@ -52,6 +52,9 @@ echo "Starting headless Chrome..."
   --headless=new \
   --no-sandbox \
   --disable-gpu \
+  --disable-dev-shm-usage \
+  --disable-extensions \
+  --no-first-run \
   --remote-debugging-port="$CDP_PORT" \
   --user-data-dir="$PROFILE_DIR" \
   about:blank >/tmp/tabpdf-chrome.log 2>&1 &
