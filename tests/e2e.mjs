@@ -430,6 +430,112 @@ async function main() {
     }
   }
 
+  // ---- Paragraph wrapping stays inside the box and the page ----
+  console.log("Paragraph wrapping");
+  const paragraph = Array.from(
+    { length: 30 },
+    (_, index) => `wrap${String(index + 1).padStart(2, "0")}`
+  ).join(" ");
+  const wrapPlacement = await evaluate(`(() => {
+    const overlay = document.getElementById("addtext-overlay");
+    const rect = overlay.getBoundingClientRect();
+    const place = (fractionX, fractionY, text) => {
+      const options = {
+        bubbles: true, cancelable: true,
+        clientX: rect.left + rect.width * fractionX,
+        clientY: rect.top + rect.height * fractionY,
+        pointerId: 21, pointerType: "mouse", button: 0, buttons: 1, isPrimary: true,
+      };
+      overlay.dispatchEvent(new PointerEvent("pointerdown", options));
+      overlay.dispatchEvent(new PointerEvent("pointerup", { ...options, buttons: 0 }));
+      const textarea = document.getElementById("addtext-value");
+      textarea.value = text;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const width = document.getElementById("addtext-width");
+    width.value = "140";
+    width.dispatchEvent(new Event("input", { bubbles: true }));
+    place(0.5, 0.75, ${JSON.stringify(paragraph)});
+    width.value = "140";
+    width.dispatchEvent(new Event("input", { bubbles: true }));
+    place(0.99, 0.85, "RIGHTEDGECHECKRIGHTEDGECHECK");
+    return {
+      rows: document.querySelectorAll("#addtext-list .addtext-entry").length,
+      applyLabel: document.getElementById("addtext-apply").textContent,
+    };
+  })()`);
+  check(wrapPlacement.rows === 2, "two paragraph boxes are listed");
+  await evaluate(`document.getElementById("addtext-apply").click()`);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await waitFor("!document.getElementById('result-panel').hidden", "paragraph result", 40000);
+
+  const wrapOutput = await evaluate(`(async () => {
+    const href = document.getElementById("download-link").href;
+    const buffer = await (await fetch(href)).arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
+    }
+    return btoa(binary);
+  })()`);
+  const wrapPath = join(ARTIFACTS, "out-wrapped.pdf");
+  writeFileSync(wrapPath, Buffer.from(wrapOutput, "base64"));
+
+  const wrapEdits = (await evaluate("window.__textEdits")).slice(-1)[0];
+  check(Array.isArray(wrapEdits) && wrapEdits.length === 2, "two wrapped edits were sent to the worker");
+  if (wrapEdits?.length === 2) {
+    check(wrapEdits[0].lines.length > 3, `paragraph wraps into several lines (${wrapEdits[0].lines.length})`);
+    check(wrapEdits[0].width === 140, "paragraph keeps the requested box width");
+    check(
+      wrapEdits[1].x + wrapEdits[1].width <= PAGE_WIDTH + 0.5,
+      "a box placed at the right edge is pulled back onto the page"
+    );
+  }
+
+  let wrapBBox = null;
+  try {
+    wrapBBox = execFileSync("pdftotext", ["-f", "2", "-l", "2", "-bbox", wrapPath, "-"], {
+      encoding: "utf8",
+    });
+  } catch {
+    wrapBBox = null;
+  }
+  if (wrapBBox === null) {
+    console.log("  skip pdftotext -bbox unavailable, skipping wrapped-paragraph PDF checks");
+  } else {
+    const words = [...wrapBBox.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)].map(
+      (match) => ({
+        xMin: Number(match[1]),
+        yMin: Number(match[2]),
+        xMax: Number(match[3]),
+        yMax: Number(match[4]),
+        text: match[5],
+      })
+    );
+    const wrapWords = words.filter((word) => /^wrap\d{2}$/.test(word.text));
+    check(wrapWords.length >= 20, "paragraph words are present in the PDF");
+    if (wrapWords.length) {
+      const rightEdge = wrapEdits[0].x + wrapEdits[0].width;
+      check(
+        wrapWords.every((word) => word.xMax <= rightEdge + 1.5),
+        "paragraph text never goes past the box width"
+      );
+      const rows = new Set(wrapWords.map((word) => Math.round(word.yMin)));
+      check(rows.size >= 4, `paragraph wraps across lines in the PDF (${rows.size} rows)`);
+    }
+    check(
+      words.every(
+        (word) =>
+          word.xMin >= -0.5 &&
+          word.xMax <= PAGE_WIDTH + 0.5 &&
+          word.yMin >= -0.5 &&
+          word.yMax <= PAGE_HEIGHT + 0.5
+      ),
+      "every word on page 2 stays inside the page bounds"
+    );
+  }
+
   // ---- Regression: the Edit text tool still replaces existing text ----
   console.log("Edit text regression");
   await evaluate(`document.querySelector('[data-tool="text"]').click()`);
@@ -442,7 +548,7 @@ async function main() {
   await evaluate(`document.querySelector('#text-existing-list .text-existing-item').click()`);
   await evaluate(`(() => {
     const value = document.getElementById("text-value");
-    value.value = "REPLACEDWORD";
+    value.value = "EDITED";
     value.dispatchEvent(new Event("input", { bubbles: true }));
     document.getElementById("text-place-btn").click();
     document.getElementById("text-apply-btn").click();
@@ -467,7 +573,7 @@ async function main() {
   writeFileSync(editedPath, Buffer.from(editedOutput, "base64"));
   const editedText = pdfText(editedPath);
   if (editedText !== null) {
-    check(editedText.includes("REPLACEDWORD"), "Edit text output contains the replacement text");
+    check(editedText.includes("EDITED"), "Edit text output contains the replacement text");
   }
 
   // ---- Zoom cross-check on the Edit text editor ----

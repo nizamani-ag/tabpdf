@@ -1084,6 +1084,15 @@
     }
     .addtext-overlay.is-dragging { cursor: grabbing; }
     .addtext-overlay.is-over-item { cursor: move; }
+    .addtext-overlay.is-resize-handle { cursor: ew-resize; }
+    .width-row { display: flex; align-items: center; gap: 8px; }
+    .width-row .text-input { flex: 1; min-width: 0; }
+    .width-row .auto-width {
+      width: auto;
+      padding: 11px 14px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
 
     .font-tag {
       flex: 0 0 auto;
@@ -1460,6 +1469,15 @@
               <label><input type="checkbox" id="addtext-bold"> Bold</label>
               <label><input type="checkbox" id="addtext-italic"> Italic</label>
             </div>
+          </div>
+
+          <div class="field">
+            <label for="addtext-width">Box width (pt)</label>
+            <div class="width-row">
+              <input class="text-input" id="addtext-width" type="number" min="24" max="2000" step="5" value="300">
+              <button type="button" class="secondary auto-width" id="addtext-width-auto" title="Wrap to the page width instead of a fixed column">Auto</button>
+            </div>
+            <p class="hint" style="margin: 8px 0 0">Text wraps inside this width, so paragraphs stay on the page. Drag the round handle on the selected box to resize it.</p>
           </div>
 
           <div class="actions-row">

@@ -202,6 +202,8 @@ const els = {
   addTextFont: $("#addtext-font"),
   addTextSize: $("#addtext-size"),
   addTextColor: $("#addtext-color"),
+  addTextWidth: $("#addtext-width"),
+  addTextWidthAuto: $("#addtext-width-auto"),
   addTextBold: $("#addtext-bold"),
   addTextItalic: $("#addtext-italic"),
   addTextDelete: $("#addtext-delete"),
@@ -284,6 +286,7 @@ const state = {
   textRenderLock: null,
   addTextPage: null,
   addTextViewport: null,
+  addTextPageSizes: {},
   addTextItems: {},
   addTextSelected: null,
   addTextPending: null,
@@ -686,6 +689,7 @@ function resetGallery() {
   closeAddTextEditor();
   state.addTextPage = null;
   state.addTextViewport = null;
+  state.addTextPageSizes = {};
   state.addTextItems = {};
   state.addTextSelected = null;
   state.addTextPending = null;
@@ -1575,7 +1579,12 @@ function placeText() {
     italic: els.textItalic.checked,
     cover: active.mode === "replace" ? true : els.textCover.checked,
   };
-  if (active.mode === "replace") edit.coverBox = active.coverBox;
+  if (active.mode === "replace") {
+    edit.coverBox = active.coverBox;
+    // Replacements wrap to the covered block's width so a paragraph cannot
+    // run past the original column (or off the page).
+    edit.width = active.coverBox.width;
+  }
 
   const page = active.page;
   if (!state.textEdits[page]) state.textEdits[page] = [];
@@ -1658,16 +1667,180 @@ function addTextSelectedItem() {
   return state.addTextItems[selected.page]?.[selected.index] || null;
 }
 
+const ADD_TEXT_PAGE_MARGIN = 2;
+const ADD_TEXT_MIN_WIDTH = 24;
+
+function addTextPageSize(page = state.addTextPage) {
+  return (page && state.addTextPageSizes[page]) || null;
+}
+
+function addTextPageWidth(page = state.addTextPage) {
+  const size = addTextPageSize(page);
+  if (size) return size.width;
+  if (state.addTextViewport) {
+    return state.addTextViewport.width / (state.addTextViewport.scale || 1);
+  }
+  return 595.28;
+}
+
+function addTextPageHeight(page = state.addTextPage) {
+  const size = addTextPageSize(page);
+  if (size) return size.height;
+  if (state.addTextViewport) {
+    return state.addTextViewport.height / (state.addTextViewport.scale || 1);
+  }
+  return 841.89;
+}
+
+function clampAddTextX(x, page = state.addTextPage) {
+  const pageWidth = addTextPageWidth(page);
+  const min = ADD_TEXT_PAGE_MARGIN;
+  const max = Math.max(
+    min,
+    pageWidth - ADD_TEXT_PAGE_MARGIN - Math.min(ADD_TEXT_MIN_WIDTH, pageWidth)
+  );
+  return Math.min(Math.max(Number(x) || 0, min), max);
+}
+
+function addTextWrapWidth(item, page = state.addTextPage) {
+  const available = Math.max(
+    12,
+    addTextPageWidth(page) - ADD_TEXT_PAGE_MARGIN - clampAddTextX(item.x, page)
+  );
+  const raw = Number(item.width);
+  if (!Number.isFinite(raw) || raw < 12) return available;
+  return Math.min(raw, available);
+}
+
+function clampAddTextWidth(width, x, page = state.addTextPage) {
+  const available = Math.max(
+    ADD_TEXT_MIN_WIDTH,
+    addTextPageWidth(page) - ADD_TEXT_PAGE_MARGIN - clampAddTextX(x, page)
+  );
+  const raw = Number(width);
+  if (!Number.isFinite(raw) || raw <= 0) return available;
+  return Math.min(Math.max(raw, ADD_TEXT_MIN_WIDTH), available);
+}
+
+function addTextMeasureLine(item, text, fontSize = item.size) {
+  addTextMeasureContext.font = addTextFontCss(item, fontSize);
+  return addTextMeasureContext.measureText(text).width;
+}
+
+function breakAddTextWord(item, word, maxWidth) {
+  const chunks = [];
+  let chunk = "";
+  for (const character of word) {
+    const candidate = chunk + character;
+    if (chunk && addTextMeasureLine(item, candidate) > maxWidth) {
+      chunks.push(chunk);
+      chunk = character;
+    } else {
+      chunk = candidate;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks.length ? chunks : [word];
+}
+
+/*
+ * Greedy word wrap measured at 1pt = 1px, so break points do not depend on the
+ * current zoom. The resulting lines are also sent to the PDF worker, which
+ * means the export matches the preview exactly.
+ */
+function wrapAddTextLines(item, page = state.addTextPage) {
+  const rawLines = String(item.text ?? "").split(/\r?\n/);
+  const maxWidth = addTextWrapWidth(item, page);
+  if (!(maxWidth > 4)) return rawLines;
+
+  const wrapped = [];
+  for (const paragraph of rawLines) {
+    if (!paragraph) {
+      wrapped.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (addTextMeasureLine(item, candidate) <= maxWidth) {
+        line = candidate;
+        continue;
+      }
+      if (line) {
+        wrapped.push(line);
+        line = "";
+      }
+      if (addTextMeasureLine(item, word) <= maxWidth) {
+        line = word;
+        continue;
+      }
+      const chunks = breakAddTextWord(item, word, maxWidth);
+      wrapped.push(...chunks.slice(0, -1));
+      line = chunks[chunks.length - 1] || "";
+    }
+    if (line) wrapped.push(line);
+  }
+  return wrapped.length ? wrapped : [""];
+}
+
+function clampAddTextY(item, page = state.addTextPage) {
+  const lines = wrapAddTextLines(item, page);
+  const size = Math.max(Number(item.size) || 14, 4);
+  const lineHeight = size * 1.2;
+  const blockBottom = Math.max(lines.length - 1, 0) * lineHeight + size * 0.28;
+  const pageHeight = addTextPageHeight(page);
+  const maxY = pageHeight - ADD_TEXT_PAGE_MARGIN - size * 0.95;
+  const minY = ADD_TEXT_PAGE_MARGIN + blockBottom;
+  const y = Number(item.y) || 0;
+  if (minY <= maxY) return Math.min(Math.max(y, minY), maxY);
+  // Taller than the page: keep the first line on the page rather than above it.
+  return Math.min(Math.max(y, ADD_TEXT_PAGE_MARGIN), Math.max(maxY, ADD_TEXT_PAGE_MARGIN));
+}
+
+function clampAddTextPosition(item, x, y, page = state.addTextPage) {
+  item.x = clampAddTextX(x, page);
+  item.y = Number(y) || 0;
+  item.y = clampAddTextY(item, page);
+  return { x: item.x, y: item.y };
+}
+
+function addTextDefaultWidth(x, page = state.addTextPage) {
+  const pageWidth = addTextPageWidth(page);
+  const available = Math.max(
+    ADD_TEXT_MIN_WIDTH,
+    pageWidth - ADD_TEXT_PAGE_MARGIN - clampAddTextX(x, page)
+  );
+  const preferred = Math.min(320, Math.max(120, pageWidth * 0.5));
+  const fieldWidth = addTextFieldWidth();
+  if (fieldWidth !== null) return clampAddTextWidth(fieldWidth, x, page);
+  return Math.min(preferred, available);
+}
+
+function addTextFieldWidth() {
+  if (!els.addTextWidth) return null;
+  const raw = els.addTextWidth.value.trim();
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function collectAddTextItems() {
   const edits = [];
   for (const [rawPage, items] of Object.entries(state.addTextItems)) {
+    const page = Number(rawPage);
     for (const item of items) {
       const text = String(item.text ?? "");
       if (!text.trim()) continue;
+      const x = clampAddTextX(item.x, page);
+      const width = addTextWrapWidth({ ...item, x }, page);
+      const lines = wrapAddTextLines({ ...item, x, width }, page);
+      const y = clampAddTextY({ ...item, x, width, lines }, page);
       edits.push({
-        page: Number(rawPage),
-        x: item.x,
-        y: item.y,
+        page,
+        x,
+        y,
+        width,
+        lines,
         text,
         font: item.font,
         size: item.size,
@@ -1700,17 +1873,22 @@ function addTextMetrics(item) {
   return { screenX, screenY, angle, scale };
 }
 
-function addTextItemBox(item) {
+function addTextItemBox(item, page = state.addTextPage) {
   const metrics = addTextMetrics(item);
   const fontSize = Math.max(item.size * metrics.scale, 1);
-  const lines = String(item.text ?? "").split(/\r?\n/);
+  const lines = wrapAddTextLines(item, page);
+  const wrapWidth = addTextWrapWidth(item, page);
+  const hasFixedWidth = Number.isFinite(Number(item.width)) && Number(item.width) >= 12;
   addTextMeasureContext.font = addTextFontCss(item, fontSize);
-  const widths = lines.length
-    ? lines.map((line) => addTextMeasureContext.measureText(line).width)
-    : [0];
-  const width = Math.max(...widths, fontSize * 0.35);
+  const measuredWidth = Math.max(
+    ...lines.map((line) => addTextMeasureContext.measureText(line).width),
+    fontSize * 0.35
+  );
+  const width = hasFixedWidth
+    ? Math.max(wrapWidth * metrics.scale, fontSize * 0.35)
+    : measuredWidth;
   const height = Math.max(lines.length, 1) * fontSize * 1.2;
-  return { ...metrics, fontSize, width, height };
+  return { ...metrics, fontSize, width, height, lines, wrapWidth };
 }
 
 function addTextScreenPointToPdf(clientX, clientY) {
@@ -1733,7 +1911,7 @@ function addTextHitTest(clientX, clientY) {
 
   const items = addTextPageItems();
   for (let index = items.length - 1; index >= 0; index -= 1) {
-    const box = addTextItemBox(items[index]);
+    const box = addTextItemBox(items[index], state.addTextPage);
     const deltaX = viewX - box.screenX;
     const deltaY = viewY - box.screenY;
     const cos = Math.cos(-box.angle);
@@ -1753,25 +1931,44 @@ function addTextHitTest(clientX, clientY) {
   return -1;
 }
 
-function paintAddTextItem(context, item) {
-  const text = String(item.text ?? "");
-  if (!text.trim()) return;
-  const metrics = addTextMetrics(item);
-  const fontSize = Math.max(item.size * metrics.scale, 1);
+function addTextSelectedHandleHit(clientX, clientY) {
+  const selected = state.addTextSelected;
+  if (!selected || selected.page !== state.addTextPage) return -1;
+  const item = state.addTextItems[selected.page]?.[selected.index];
+  const viewport = state.addTextViewport;
+  const rect = els.addTextOverlay.getBoundingClientRect();
+  if (!item || !viewport || rect.width <= 0) return -1;
+
+  const box = addTextItemBox(item, selected.page);
+  const displayScale = rect.width / viewport.width;
+  const viewX = (clientX - rect.left) / displayScale;
+  const viewY = (clientY - rect.top) / displayScale;
+  const deltaX = viewX - box.screenX;
+  const deltaY = viewY - box.screenY;
+  const cos = Math.cos(-box.angle);
+  const sin = Math.sin(-box.angle);
+  const localX = deltaX * cos - deltaY * sin;
+  const localY = deltaX * sin + deltaY * cos;
+  const handleX = box.width;
+  const handleY = -box.height / 2;
+  return Math.hypot(localX - handleX, localY - handleY) <= 11 ? selected.index : -1;
+}
+
+function paintAddTextItem(context, item, box) {
+  if (!String(item.text ?? "").trim()) return;
   context.save();
-  context.translate(metrics.screenX, metrics.screenY);
-  context.rotate(metrics.angle);
-  context.font = addTextFontCss(item, fontSize);
+  context.translate(box.screenX, box.screenY);
+  context.rotate(box.angle);
+  context.font = addTextFontCss(item, box.fontSize);
   context.fillStyle = item.color;
   context.textBaseline = "alphabetic";
-  text.split(/\r?\n/).forEach((line, lineIndex) => {
-    if (line) context.fillText(line, 0, lineIndex * fontSize * 1.2);
+  box.lines.forEach((line, lineIndex) => {
+    if (line) context.fillText(line, 0, lineIndex * box.fontSize * 1.2);
   });
   context.restore();
 }
 
-function paintAddTextSelection(context, item) {
-  const box = addTextItemBox(item);
+function paintAddTextSelection(context, box) {
   context.save();
   context.translate(box.screenX, box.screenY);
   context.rotate(box.angle);
@@ -1785,6 +1982,14 @@ function paintAddTextSelection(context, item) {
     box.height + box.fontSize * 0.35
   );
   context.setLineDash([]);
+  // Resize handle on the right edge of the selected box.
+  context.beginPath();
+  context.arc(box.width, -box.height / 2, 5.5, 0, Math.PI * 2);
+  context.fillStyle = "#2f7dff";
+  context.fill();
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 1.5;
+  context.stroke();
   context.restore();
 }
 
@@ -1833,11 +2038,12 @@ function drawAddTextPreview() {
   context.clearRect(0, 0, viewport.width, viewport.height);
 
   addTextPageItems().forEach((item, index) => {
+    const box = addTextItemBox(item, state.addTextPage);
     const selected =
       state.addTextSelected?.page === state.addTextPage &&
       state.addTextSelected?.index === index;
-    if (selected) paintAddTextSelection(context, item);
-    paintAddTextItem(context, item);
+    if (selected) paintAddTextSelection(context, box);
+    paintAddTextItem(context, item, box);
   });
 
   if (state.addTextPending && state.addTextPending.page === state.addTextPage) {
@@ -1890,10 +2096,45 @@ function syncAddTextControls(item) {
     els.addTextColor.value = item.color;
     els.addTextBold.checked = Boolean(item.bold);
     els.addTextItalic.checked = Boolean(item.italic);
+    if (els.addTextWidth) {
+      const width = Number(item.width);
+      els.addTextWidth.value =
+        Number.isFinite(width) && width >= 12 ? String(Math.round(width)) : "";
+    }
   } else {
     els.addTextValue.value = "";
   }
   updateAddTextActions();
+}
+
+function applyAddTextWidth() {
+  const width = addTextFieldWidth();
+  const selected = state.addTextSelected;
+  const pending = state.addTextPending;
+  if (selected) {
+    const item = addTextSelectedItem();
+    if (item) {
+      item.width = width === null ? null : clampAddTextWidth(width, item.x, selected.page);
+      item.y = clampAddTextY(item, selected.page);
+    }
+  } else if (pending) {
+    pending.width = width === null ? null : clampAddTextWidth(width, pending.x, pending.page);
+    pending.y = clampAddTextY(pending, pending.page);
+  }
+  drawAddTextPreview();
+  updateAddTextActions();
+}
+
+function normalizeAddTextWidthField() {
+  if (!els.addTextWidth) return;
+  const item = addTextSelectedItem() || state.addTextPending;
+  const width = Number(item?.width);
+  els.addTextWidth.value = Number.isFinite(width) && width >= 12 ? String(Math.round(width)) : "";
+}
+
+function clearAddTextWidth() {
+  if (els.addTextWidth) els.addTextWidth.value = "";
+  applyAddTextWidth();
 }
 
 function renderAddTextList() {
@@ -1990,6 +2231,7 @@ function handleAddTextInput() {
     const item = {
       x: pending.x,
       y: pending.y,
+      width: pending.width,
       text: value,
       font: pending.font,
       size: pending.size,
@@ -1999,6 +2241,7 @@ function handleAddTextInput() {
     };
     if (!state.addTextItems[pending.page]) state.addTextItems[pending.page] = [];
     state.addTextItems[pending.page].push(item);
+    item.y = clampAddTextY(item, pending.page);
     state.addTextPending = null;
     state.addTextSelected = {
       page: pending.page,
@@ -2006,7 +2249,10 @@ function handleAddTextInput() {
     };
   } else {
     const selected = addTextSelectedItem();
-    if (selected) selected.text = value;
+    if (selected) {
+      selected.text = value;
+      selected.y = clampAddTextY(selected, state.addTextSelected.page);
+    }
   }
 
   renderAddTextList();
@@ -2019,8 +2265,14 @@ function applyAddTextStyle() {
   const defaults = addTextDefaults();
   const selected = addTextSelectedItem();
   const pending = state.addTextPending;
-  if (selected) Object.assign(selected, defaults);
-  if (pending) Object.assign(pending, defaults);
+  if (selected) {
+    Object.assign(selected, defaults);
+    selected.y = clampAddTextY(selected, state.addTextSelected.page);
+  }
+  if (pending) {
+    Object.assign(pending, defaults);
+    pending.y = clampAddTextY(pending, pending.page);
+  }
   drawAddTextPreview();
 }
 
@@ -2033,6 +2285,13 @@ async function renderAddTextPage(pageNumber) {
     if (token !== state.addTextToken) return;
 
     const page = await state.pdfDoc.getPage(pageNumber);
+    const pageBox = page.view || null;
+    const boxWidth = pageBox ? Math.abs(Number(pageBox[2]) - Number(pageBox[0])) : 0;
+    const boxHeight = pageBox ? Math.abs(Number(pageBox[3]) - Number(pageBox[1])) : 0;
+    state.addTextPageSizes[pageNumber] = {
+      width: boxWidth > 1 ? boxWidth : 595.28,
+      height: boxHeight > 1 ? boxHeight : 841.89,
+    };
     const baseViewport = page.getViewport({ scale: 1 });
     const parentWidth = els.addTextPreview.parentElement?.clientWidth || 640;
     const targetWidth = Math.max(250, Math.min(680, parentWidth - 4 || 640));
@@ -2143,6 +2402,15 @@ async function focusAddTextItem(page, index) {
   els.addTextValue.focus();
 }
 
+function beginAddTextPointerDrag(event) {
+  els.addTextOverlay.classList.add("is-dragging");
+  try {
+    els.addTextOverlay.setPointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture is an optimisation; ignore when unavailable.
+  }
+}
+
 function handleAddTextPointerDown(event) {
   if (state.busy || !state.addTextViewport || !state.addTextPage) return;
   if (event.button !== undefined && event.button !== 0) return;
@@ -2150,11 +2418,29 @@ function handleAddTextPointerDown(event) {
   if (!point) return;
   event.preventDefault();
 
+  // Resize the selected box by dragging the round handle on its right edge.
+  const resizeIndex = addTextSelectedHandleHit(event.clientX, event.clientY);
+  if (resizeIndex >= 0) {
+    const item = addTextPageItems()[resizeIndex];
+    const box = addTextItemBox(item, state.addTextPage);
+    state.addTextDrag = {
+      type: "resize",
+      page: state.addTextPage,
+      index: resizeIndex,
+      startX: point[0],
+      startWidth: Math.max(box.wrapWidth, 12),
+      moved: false,
+    };
+    beginAddTextPointerDrag(event);
+    return;
+  }
+
   const hitIndex = addTextHitTest(event.clientX, event.clientY);
   if (hitIndex >= 0) {
     selectAddTextItem(state.addTextPage, hitIndex);
     const item = addTextPageItems()[hitIndex];
     state.addTextDrag = {
+      type: "move",
       page: state.addTextPage,
       index: hitIndex,
       originX: item.x,
@@ -2163,12 +2449,7 @@ function handleAddTextPointerDown(event) {
       startY: point[1],
       moved: false,
     };
-    els.addTextOverlay.classList.add("is-dragging");
-    try {
-      els.addTextOverlay.setPointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture is an optimisation; ignore when unavailable.
-    }
+    beginAddTextPointerDrag(event);
     return;
   }
 
@@ -2177,14 +2458,20 @@ function handleAddTextPointerDown(event) {
     removeAddTextItem(state.addTextSelected.page, state.addTextSelected.index);
   }
 
-  state.addTextSelected = null;
-  state.addTextPending = {
+  const x = clampAddTextX(point[0], state.addTextPage);
+  const pending = {
     page: state.addTextPage,
-    x: point[0],
+    x,
     y: point[1],
+    width: addTextDefaultWidth(x),
     ...addTextDefaults(),
   };
+  pending.y = clampAddTextY(pending, pending.page);
+
+  state.addTextSelected = null;
+  state.addTextPending = pending;
   syncAddTextControls(null);
+  if (els.addTextWidth) els.addTextWidth.value = String(Math.round(pending.width));
   els.addTextValue.focus();
   drawAddTextPreview();
   renderAddTextList();
@@ -2201,10 +2488,10 @@ function handleAddTextPointerMove(event) {
   }
   if (!drag) {
     if (state.addTextViewport) {
-      els.addTextOverlay.classList.toggle(
-        "is-over-item",
-        addTextHitTest(event.clientX, event.clientY) >= 0
-      );
+      const handleHit = addTextSelectedHandleHit(event.clientX, event.clientY) >= 0;
+      const itemHit = !handleHit && addTextHitTest(event.clientX, event.clientY) >= 0;
+      els.addTextOverlay.classList.toggle("is-resize-handle", handleHit);
+      els.addTextOverlay.classList.toggle("is-over-item", itemHit);
     }
     return;
   }
@@ -2215,17 +2502,39 @@ function handleAddTextPointerMove(event) {
   const deltaX = point[0] - drag.startX;
   const deltaY = point[1] - drag.startY;
   if (!drag.moved && Math.hypot(deltaX, deltaY) * scale > 2) drag.moved = true;
-  if (!drag.moved) return;
 
+  if (drag.type === "resize") {
+    const item = state.addTextItems[drag.page]?.[drag.index];
+    if (!item) return;
+    const width = clampAddTextWidth(
+      drag.startWidth + (point[0] - drag.startX),
+      item.x,
+      drag.page
+    );
+    item.width = width;
+    item.y = clampAddTextY(item, drag.page);
+    if (els.addTextWidth) els.addTextWidth.value = String(Math.round(width));
+    drawAddTextPreview();
+    return;
+  }
+
+  if (!drag.moved) return;
   const item = state.addTextItems[drag.page]?.[drag.index];
   if (!item) return;
-  item.x = drag.originX + deltaX;
-  item.y = drag.originY + deltaY;
+  const clamped = clampAddTextPosition(
+    item,
+    drag.originX + deltaX,
+    drag.originY + deltaY,
+    drag.page
+  );
+  item.x = clamped.x;
+  item.y = clamped.y;
   drawAddTextPreview();
 }
 
 function handleAddTextPointerUp(event) {
   els.addTextOverlay.classList.remove("is-dragging");
+  els.addTextOverlay.classList.remove("is-resize-handle");
   if (state.addTextDrag) {
     state.addTextDrag = null;
     updateAddTextActions();
@@ -2866,6 +3175,9 @@ function init() {
   els.addTextFont.addEventListener("change", applyAddTextStyle);
   els.addTextSize.addEventListener("input", applyAddTextStyle);
   els.addTextColor.addEventListener("input", applyAddTextStyle);
+  els.addTextWidth.addEventListener("input", applyAddTextWidth);
+  els.addTextWidth.addEventListener("change", normalizeAddTextWidthField);
+  els.addTextWidthAuto.addEventListener("click", clearAddTextWidth);
   els.addTextBold.addEventListener("change", applyAddTextStyle);
   els.addTextItalic.addEventListener("change", applyAddTextStyle);
   els.addTextApply.addEventListener("click", applyAddText);

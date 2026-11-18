@@ -84,13 +84,17 @@ select them; use the toolbar for **All**, **Odd**, **Even**, **Invert**, and
   second PDF at the first selected position.
 - **Add text** opens a page editor for writing new text on top of the PDF:
   click anywhere on the page to drop a text box, type in the side panel, and
-  drag the box to move it. You can add several boxes, restyle the selected one
-  (font, size, colour, bold, italic), jump between pages with the
-  &larr; / &rarr; buttons, and remove individual boxes or clear a page. Only
-  boxes with text are written to the PDF.
+  drag the box to move it. Every box has a **width**: paragraphs wrap inside
+  it, and boxes are clamped to the page, so text can never run past the page
+  edge. Resize the selected box by dragging the round handle on its right
+  edge, type a **Box width**, or press **Auto** to wrap to the page. You can
+  add several boxes, restyle the selected one (font, size, colour, bold,
+  italic), jump between pages with the &larr; / &rarr; buttons, and remove
+  individual boxes or clear a page. Only boxes with text are written to the
+  PDF.
 - **Edit text** opens a page editor for text that already exists: click a text
   block below the preview to cover it with a white box and draw replacement
-  text. The original text is not rewritten, so text extraction from the
+  text. Replacements wrap to the width of the covered block. The original text is not rewritten, so text extraction from the
   underlying page may still contain the old string.
 - Both text editors have a **Zoom** bar under the preview: **−** / **+** /
   **Fit**. Use it when the page is too small to click accurately; the page

@@ -347,6 +347,57 @@ function standardFontKey(edit) {
   return "Helvetica";
 }
 
+function wrapTextForPdf(font, size, text, maxWidth) {
+  const rawLines = String(text ?? "").split(/\r?\n/);
+  if (!Number.isFinite(maxWidth) || maxWidth < 8) return rawLines;
+  const measure = (line) => font.widthOfTextAtSize(line, size);
+
+  const breakWord = (word) => {
+    const chunks = [];
+    let chunk = "";
+    for (const character of word) {
+      const candidate = chunk + character;
+      if (chunk && measure(candidate) > maxWidth) {
+        chunks.push(chunk);
+        chunk = character;
+      } else {
+        chunk = candidate;
+      }
+    }
+    if (chunk) chunks.push(chunk);
+    return chunks.length ? chunks : [word];
+  };
+
+  const wrapped = [];
+  for (const paragraph of rawLines) {
+    if (!paragraph) {
+      wrapped.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (measure(candidate) <= maxWidth) {
+        line = candidate;
+        continue;
+      }
+      if (line) {
+        wrapped.push(line);
+        line = "";
+      }
+      if (measure(word) <= maxWidth) {
+        line = word;
+        continue;
+      }
+      const chunks = breakWord(word);
+      wrapped.push(...chunks.slice(0, -1));
+      line = chunks[chunks.length - 1] || "";
+    }
+    if (line) wrapped.push(line);
+  }
+  return wrapped.length ? wrapped : [""];
+}
+
 async function applyTextEdits(data) {
   const edits = Array.isArray(data.edits) ? data.edits : [];
   if (!edits.length) {
@@ -378,15 +429,36 @@ async function applyTextEdits(data) {
 
     const page = doc.getPage(pageNumber - 1);
     const pageSize = page.getSize();
-    const x = Math.min(Math.max(Number(edit.x) || 0, 0), pageSize.width);
-    const y = Math.min(Math.max(Number(edit.y) || 0, 0), pageSize.height);
+    let x = Math.min(Math.max(Number(edit.x) || 0, 0), pageSize.width);
+    let y = Math.min(Math.max(Number(edit.y) || 0, 0), pageSize.height);
     const size = Math.min(Math.max(Number(edit.size) || 14, 4), 240);
     const font = await getFont(edit);
     const color = parseColor(edit.color);
     const text = String(edit.text ?? "");
-    const textLines = text.split(/\r?\n/);
+    const providedLines = Array.isArray(edit.lines)
+      ? edit.lines.map((line) => String(line ?? ""))
+      : null;
+    const textLines =
+      providedLines && providedLines.length
+        ? providedLines
+        : wrapTextForPdf(font, size, text, Number(edit.width));
     const lineCount = Math.max(textLines.length, 1);
     const visibleLines = textLines.filter((line) => line.length > 0);
+
+    // Added text (not a replacement of an existing block) must stay on the page.
+    if (!edit.coverBox) {
+      const lineHeight = size * 1.2;
+      const blockBottom = Math.max(textLines.length - 1, 0) * lineHeight + size * 0.28;
+      if (y < blockBottom) y = blockBottom;
+      y = Math.min(y, Math.max(0, pageSize.height - size * 0.9));
+      if (y < 0) y = 0;
+      if (visibleLines.length) {
+        const widest = Math.max(
+          ...visibleLines.map((line) => font.widthOfTextAtSize(line, size))
+        );
+        if (x + widest > pageSize.width) x = Math.max(0, pageSize.width - widest);
+      }
+    }
 
     if (edit.coverBox) {
       page.drawRectangle({

@@ -23,7 +23,8 @@ PROFILE_DIR="$(mktemp -d)"
 cleanup() {
   if [[ -n "$CHROME_PID" ]]; then
     kill "$CHROME_PID" 2>/dev/null || true
-    wait "$CHROME_PID" 2>/dev/null || true
+    sleep 0.3
+    kill -9 "$CHROME_PID" 2>/dev/null || true
   fi
   if [[ -n "$WEB_PID" ]]; then
     kill "$WEB_PID" 2>/dev/null || true
